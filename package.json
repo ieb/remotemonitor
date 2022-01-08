@@ -1,0 +1,15 @@
+{
+  "name": "tracker",
+  "version": "1.0.0",
+  "description": "GPS Tracker using SMS",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ds18b20-raspi": "^0.3.6",
+    "node-gpsd": "^0.3.2"
+  }
+}
