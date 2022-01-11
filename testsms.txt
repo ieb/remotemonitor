@@ -1,0 +1,28 @@
+Location 1, folder "Inbox", SIM memory, Inbox folder
+SMS message
+SMSC number          : "+447456456456"
+Sent                 : Sun 09 Jan 2022 16:55:59  +0000
+Coding               : Default GSM alphabet (no compression)
+Remote number        : "+44123123123"
+Status               : Read
+
+Status
+
+Location 2
+Empty
+Location 3
+Empty
+Location 4
+Empty
+Location 5
+Empty
+Location 6
+Empty
+Location 7
+Empty
+Location 8
+Empty
+Location 9
+Empty
+Location 10
+Empty

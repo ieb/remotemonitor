@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "ds18b20-raspi": "^0.3.6",
+    "i2c-bus": "^5.2.2",
     "node-gpsd": "^0.3.2"
   }
 }

@@ -230,3 +230,26 @@ To start ppp0, then ping 8.8.8.8, the packet latency should be different from wi
         sudo apt-get install golang
         go get github.com/google/skicka
 
+Gave up, takes too long and needs 400MB of disk to install go.
+Once installed the build took well over 1h to run on the pi. Not really big enough for building go binaries.
+
+## Install node and npm
+
+        sudo apt-get install nodejs npm
+
+## Install tracker code and sms responder.
+
+        git clone <tracker git repo, tbd>
+        cd tracker
+        npm install
+
+# Todo
+
+[x] Use GPS tty directly in node to reduce cpu usage - total fail. node uses 76% using serialport and very simple processing, gpsd uses 15%, stick with gpsd.
+[ ] Make gammu-smsd stable when USB fails or use gammu cli or go direct to tty.
+[ ] add systemd service for the tracker logger
+[ ] decide how to sync time, probably ntpd on start if the gpsd doesnt do it.
+[ ] create uploader in node and run periodically or on demand from sms message.
+
+
+

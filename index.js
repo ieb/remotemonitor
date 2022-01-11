@@ -7,7 +7,6 @@ const config = require("./config");
 const { exec } = require('child_process');
 
 var dat = {
-    m: 0,
     pos : {
         nf: 0,
         lat: 0,
@@ -19,6 +18,11 @@ var dat = {
     },
     onewire: {}
 };
+
+
+
+
+
 var listener = new gpsd.Listener();
 
 listener.on('TPV', function (tpv) {
@@ -29,18 +33,21 @@ listener.on('TPV', function (tpv) {
             dat.pos.lon = tpv.lon;
             dat.pos.eph = tpv.eph;
         } else {
-            dat.pos.lat = tpv.lat*0.1+dat.lat*0.9;
-            dat.pos.lon = tpv.lon*0.1+dat.lon*0.9;
-            dat.pos.eph = tpv.eph*0.1+dat.eph*0.9;
+            dat.pos.lat = tpv.lat*0.1+dat.pos.lat*0.9;
+            dat.pos.lon = tpv.lon*0.1+dat.pos.lon*0.9;
+            dat.pos.eph = tpv.eph*0.1+dat.pos.eph*0.9;
+            dat.pos.speed = tpv.speed;
+            dat.pos.time = tpv.time;
         }
         dat.pos.m = tpv.mode;
     } else {
         // no fix
-        dat.pos.nf = dat.nf++;
+        dat.pos.nf = dat.pos.nf++;
     }
 });
 
 listener.connect(function() {
+    console.log("Gps connected");
     listener.watch();
 });
 
@@ -55,15 +62,19 @@ barometer.begin((err, type) =>{
     } else {
         console.log("Initialised ",type);
         setInterval(() => {
-            barometer.readPressureAndTemparature((err, pressure, temperature, humidity) => {
-                if ( err ) {
-                    console.log("Error Reading BMP280 ",err);
-                } else {
-                    dat.bme280.p = (pressure/100).toFixed(1);
-                    dat.bme280.t = temperature.toFixed(1);
-                    dat.bme280.h = humidity.toFixed(1);
-                }
-            });
+            try {
+                barometer.readPressureAndTemparature((err, pressure, temperature, humidity) => {
+                    if ( err ) {
+                        console.log("Error Reading BMP280 ",err);
+                    } else {
+                        dat.bme280.p = (pressure/100).toFixed(1);
+                        dat.bme280.t = temperature.toFixed(1);
+                        dat.bme280.h = humidity.toFixed(1);
+                    }
+                });    
+            } catch (e) {
+                console.log("Failed to read barrometer", e);
+            }
         }, 30000);
     }
 });
@@ -125,32 +136,45 @@ fs.watch('/var/spool/gammu/inbox/', async (eventType, filename) => {
 
 
 setInterval(() => {
-    sensors.readAllC((err, temps) => {
-      if (err) {
-          console.log("Error Reading 1 Wire ",err);
-      } else {
-          for(var i = 0; i < temps.length; i++) {
-            data.onewire[temps[i].id] = data.onewire[temps[i].id] || {};
-            data.onewire[temps[i].id].m = now;
-            data.onewire[temps[i].id].temp = temps[i].t;
-          }
-      }
-    });
+    try {
+        sensors.readAllC((err, temps) => {
+            if (err) {
+                console.log("Error Reading 1 Wire ",err);
+            } else {
+                for(var i = 0; i < temps.length; i++) {
+                  dat.onewire[temps[i].id] = dat.onewire[temps[i].id] || {};
+                  dat.onewire[temps[i].id].m = Date.now();
+                  dat.onewire[temps[i].id].temp = temps[i].t;
+                }
+            }
+          });
+    } catch (e) {
+        console.log("Failed reading 1 wire ",e);
+    }
   }, 10000);
 
 setInterval(() => {
     console.log(dat);
 },5000);
 
+
+function pad2Zeros(n) {
+    return ("00" + n).slice(-2);
+}
+
 // dump everything out.
 setInterval(() => {
-    var d = new Date();
-    data[0] = "\""+d.toISOString()+"\"";
-    var fname = "iotdata/data-"+d.getFullYear()+pad2Zeros(d.getMonth()+1)+pad2Zeros(d.getDate())+".jsonlog";
-    fs.appendFile(fname,JSON.stringify(dat)+"\n", (err) => {
-        if ( err ) {
-            console.log("Failed to write to ", fname);
-        }
-    });
+    try {
+        dat.ts = Date.now();
+        var d = new Date();
+        var fname = "data/data-"+d.getFullYear()+pad2Zeros(d.getMonth()+1)+pad2Zeros(d.getDate())+".jsonlog";
+        fs.appendFile(fname,JSON.stringify(dat)+"\n", (err) => {
+            if ( err ) {
+                console.log("Failed to write to ", fname);
+            }
+        });
+    } catch (e) {
+        console.log("Failed saving data ",e);
+    }   
 }, 60000);
 
