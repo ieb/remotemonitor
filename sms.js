@@ -1,5 +1,7 @@
 
 const { exec, spawn } = require('child_process');
+const process = require('process');
+const path = require('path');
 
 class SMS {
     constructor(config) {
@@ -17,9 +19,12 @@ class SMS {
         this.dequeueDelay = config.dequeueDelay || 10000;
         this.checkDelay = config.checkDelay || 30000;
         this.deleteMessageDelay = config.deleteMessageDelay || 5000;
+        this.gammuConfig = config.gammuConfig || '/etc/gammu-smsd';
         this.dequeueMessage();
         this.deleteMessage();
+
     }
+
 
     addHandler(command, handler) {
         this.handler[command] = handler;
@@ -33,7 +38,7 @@ class SMS {
         if ( this.demoMode ) {
             getsms = spawn("cat", ["testsms.txt"]/*gammu",["-c","/etc/gammu-smsdrc","getallsms","-pbk"]*/);            
         } else {
-            getsms = spawn("gammu",["-c","/etc/gammu-smsdrc","getallsms","-pbk"]);            
+            getsms = spawn("gammu",["-c",this.gammuConfig,"getallsms","-pbk"]);            
         }
         var buffer = "";
         getsms.stdout.on('data', (data) => {
@@ -206,16 +211,16 @@ class SMS {
                     if ( response.requeue) {
                         console.log("Dequeue: requeue ",message);
                         message.requeue++;
-                        this.pushQueue(message);
+                        that.pushQueue(message);
                     } else if ( response.message && response.to ) {
                         var sendsms = undefined;
-                        if (this.demoMode) {
-                            sendsms = spawn("cat",/*'gammu',['-c','/etc/gammu-smsdrc','--sendsms','TEXT',response.to]*/);
+                        if (that.demoMode) {
+                            sendsms = spawn("cat");
 
                         } else {
-                            sendsms = spawn('gammu',['-c','/etc/gammu-smsdrc','--sendsms','TEXT',response.to]);
+                            sendsms = spawn('gammu',['-c',that.gammuConfig,'--sendsms','TEXT',response.to]);
                         }
-                        if (this.demo)
+                        if (that.demo)
                         sendsms.stdout.on('data', (data) => {
                             console.log("sensms stdout:",data.toString());
                         });
@@ -232,7 +237,7 @@ class SMS {
                                 message.retries++;
                                 if ( message.retries < 5) {
                                     console.log("Dequeue: retrying ",message);
-                                    this.pushQueue(message);
+                                    that.pushQueue(message);
                                 } else {
                                     that.processed(message);
                                     console.log("Dequeue: Failed to handle ",message);
@@ -277,7 +282,7 @@ class SMS {
                 if ( this.demoMode) {
                     cmd = `echo delete messages ${m.location} `;
                 } else {
-                    cmd = `gammu deletesms 1 ${m.location}`;
+                    cmd = `gammu -c ${this.gammuConfig} deletesms 1 ${m.location}`;
                 }
                 exec(cmd, (error, stdout, stderr) => {
                     if ( !error) {
@@ -294,35 +299,43 @@ class SMS {
     }
 };
 
+if ( path.basename(process.argv[1]) ==  "sms.js" ) {
 
-const sms = new SMS({
-    dequeueDelay: 10000,
-    checkDelay: 30000,
-    demoMode: true,
-    allowedFrom: {
-        "+44123123123": true
-    }
-});
-sms.addHandler("status", (message, cb) => {    
-    cb({
-        message: `lat:${data.pos.lat} lon:${data.pos.lon} temp:${data.bme280.t} pressure:${data.bme280.p} rh:${data.bme280.h} https://www.google.com/maps/search/?api=1&query=${this.data.pos.lat}%2C${this.data.pos.lon}`,
-        to: message.from
+    const sms = new SMS({
+        dequeueDelay: 10000,
+        checkDelay: 30000,
+        demoMode: true,
+        allowedFrom: {
+            "+44123123123": true
+        }
     });
-});
-sms.addHandler("Status", (message, cb) => {    
-    message.requeue = message.requeue || 0;
-    if (message.requeue < 3) {
+    sms.addHandler("status", (message, cb) => {    
         cb({
-            requeue: true
-        });
-    } else {
-        console.log("Got Status");
-        cb({
-            message: `All Ok`,
+            message: `lat:${data.pos.lat} lon:${data.pos.lon} temp:${data.bme280.t} pressure:${data.bme280.p} rh:${data.bme280.h} https://www.google.com/maps/search/?api=1&query=${this.data.pos.lat}%2C${this.data.pos.lon}`,
             to: message.from
-        });    
-    }
-});
+        });
+    });
+    sms.addHandler("Status", (message, cb) => {    
+        message.requeue = message.requeue || 0;
+        if (message.requeue < 3) {
+            cb({
+                requeue: true
+            });
+        } else {
+            console.log("Got Status");
+            cb({
+                message: `All Ok`,
+                to: message.from
+            });    
+        }
+    });
 
 
-sms.processSMS();
+    sms.processSMS();
+
+} else {
+    console.log(process.argv);
+    module.exports = {
+        SMS: SMS
+    };
+}
