@@ -4,7 +4,7 @@ const BME280 = require('./BME280');
 const fs = require('fs');
 const sensors = require('ds18b20-raspi');  
 const config = require("./config");
-const { exec } = require('child_process');
+const {SMS} = require("./sms.js");
 
 var dat = {
     pos : {
@@ -20,7 +20,7 @@ var dat = {
 };
 
 
-
+// GPS
 
 
 var listener = new gpsd.Listener();
@@ -53,89 +53,42 @@ listener.connect(function() {
 
 
 
-
+// read barrometer
 
 var barometer = new BME280({address: 0x76});
 barometer.begin((err, type) =>{
     if ( err ) {
         console.log("Failed to init BMx280 sensor ",err);
+        barometer = undefined;
     } else {
         console.log("Initialised ",type);
-        setInterval(() => {
-            try {
-                barometer.readPressureAndTemparature((err, pressure, temperature, humidity) => {
-                    if ( err ) {
-                        console.log("Error Reading BMP280 ",err);
-                    } else {
-                        dat.bme280.p = (pressure/100).toFixed(1);
-                        dat.bme280.t = temperature.toFixed(1);
-                        dat.bme280.h = humidity.toFixed(1);
-                    }
-                });    
-            } catch (e) {
-                console.log("Failed to read barrometer", e);
-            }
-        }, 30000);
     }
 });
 
-
-const inboxDir = '/var/spool/gammu/inbox/';
-async function processSMSCommand(date,time,idx,fromNumber,command) {
-    console.log(date,time,idx,fromNumber,command);
-    if ( command === "status") {
-        var status = `lat:${dat.pos.lat} lon:${dat.pos.lon} temp:${dat.bme280.t} pressure:${dat.bme280.p} rh:${dat.bme280.h} https://www.google.com/maps/search/?api=1&query=${dat.pos.lat}%2C${dat.pos.lon}`;
-        console.log("Sendign status update to "+fromNumber);
-        exec(`gammu-smsd-inject -c /etc/gammu-smsdrc TEXT ${fromNumber} -len ${status.length} -unicode -text "${status}"`,(error, stdout, stderr) => {
-            if (error) {
-              console.log(`exec error: ${error}`);
-              return;
-            }
-            console.log(`stdout: ${stdout}`);
-            console.log(`stderr: ${stderr}`);
-          });
-    } else {
-        console.log("Command not recognised", command);
-    }
-}
-
-async function processSMSMessageFile(filename) {
-    const messageMatch = new RegExp("IN(.*)_(.*)_(.*)_(.*)_(.*)\\.txt", 'gm');
-    var m;
-    if ((m = messageMatch.exec(filename)) !== null ) {
-        console.log("Matched ", filename, m[4]);
-        if ( m[4] == config.phone ) {
-            var command = fs.readFileSync(inboxDir+filename, "utf-8");
-            command = command.trim();
-            await processSMSCommand(m[1],m[2],m[3],m[4],command);
+function updateBME280() {
+    try {
+        if (barometer) {
+            barometer.readPressureAndTemparature((err, pressure, temperature, humidity) => {
+                if ( err ) {
+                    console.log("Error Reading BMP280 ",err);
+                } else {
+                    dat.bme280.p = (pressure/100).toFixed(1);
+                    dat.bme280.t = temperature.toFixed(1);
+                    dat.bme280.h = humidity.toFixed(1);
+                }
+            });        
         }
-    } else {
-        console.log("No match for ", filename );
+    } catch (e) {
+        console.log("Failed to read barrometer", e);
     }
-    fs.unlinkSync(inboxDir+filename);
+
 }
 
 
-var backlog = fs.readdirSync(inboxDir);
-backlog.forEach(async (filename) => {
-    console.log(`Backlog provided: ${filename}`);
-    await processSMSMessageFile(filename);
-});
 
-fs.watch('/var/spool/gammu/inbox/', async (eventType, filename) => {
-  console.log(`event type is: ${eventType}`);
-  if (filename) {
-      if ( fs.existsSync(inboxDir+filename)) {
-        console.log(`filename provided: ${filename}`);
-        await processSMSMessageFile(filename);  
-      }
-  } else {
-    console.log('filename not provided');
-  }
-});
+// Read Temperatures
 
-
-setInterval(() => {
+function updateTemperatures() {
     try {
         sensors.readAllC((err, temps) => {
             if (err) {
@@ -151,20 +104,26 @@ setInterval(() => {
     } catch (e) {
         console.log("Failed reading 1 wire ",e);
     }
-  }, 10000);
+}
 
 setInterval(() => {
+    updateTemperatures();
+    updateBME280();
     console.log(dat);
-},5000);
+},60000);
 
 
 function pad2Zeros(n) {
     return ("00" + n).slice(-2);
 }
 
+// LOGFile output
+
 // dump everything out.
 setInterval(() => {
     try {
+        updateBME280();
+        updateTemperatures();
         dat.ts = Date.now();
         var d = new Date();
         var fname = "data/data-"+d.getFullYear()+pad2Zeros(d.getMonth()+1)+pad2Zeros(d.getDate())+".jsonlog";
@@ -177,4 +136,18 @@ setInterval(() => {
         console.log("Failed saving data ",e);
     }   
 }, 60000);
+
+
+// SMS Command processing
+
+const sms = new SMS(config);
+sms.addHandler("status", () => {    
+    updateBME280();
+    updateTemperatures();
+    return `lat:${dat.pos.lat} lon:${dat.pos.lon} temp:${dat.bme280.t} pressure:${dat.bme280.p} rh:${dat.bme280.h} https://www.google.com/maps/search/?api=1&query=${dat.pos.lat}%2C${dat.pos.lon}`;
+});
+sms.open((err) => {
+    console.log("Modem Errror",err);
+});
+
 

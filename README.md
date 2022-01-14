@@ -31,14 +31,7 @@ turn on i2c, 1 wire,
 
 ## SMS
 
-        apt-get install gammu gammu-smsd
-        optional, probably already available
-        apt-get install usb-modeswitch git
-        sudo adduser  pi gammu
-        logout
-        login
-        plug the modem in
-        gammu-detect
+Tried to use gammu, but it was unreliable so sms handling is done in node which seems very reliable.
 
 
         See https://wiki.dd-wrt.com/wiki/index.php/Mobile_Broadband#Huawei for prefered user port.
@@ -53,49 +46,6 @@ turn on i2c, 1 wire,
         pi@raspberrypi:~ $ vi 
 
         sudo 
-
-        cat << EOF > /etc/gammu-smsdrc 
-        # Configuration file for Gammu SMS Daemon
-
-        # Gammu library configuration, see gammurc(5)
-        [gammu]
-        # Match by device ID, the user port is 3, hopefully it will select that.
-        Device = /dev/serial/by-id/usb-HUAWEI_Technology_HUAWEI_Mobile-if04-port0
-        connection = at
-        #logfile = /var/log/gammu.log
-        # Debugging
-        logformat = textall
-
-
-        # SMSD configuration, see gammu-smsdrc(5)
-        [smsd]
-        service = files
-        logfile = syslog
-        # Increase for debugging information
-        debuglevel = 1
-        Send = True
-        Receive = True
-        CommTimeout = 10
-        CheckSecurity = 0
-
-        # Paths where messages are stored
-        inboxpath = /var/spool/gammu/inbox/
-        outboxpath = /var/spool/gammu/outbox/
-        sentsmspath = /var/spool/gammu/sent/
-        errorsmspath = /var/spool/gammu/error/
-        EOF
-
-
-        gammu  -c /etc/gammu-smsdrc identify
-        echo "testing" | gammu -c /etc/gammu-smsdrc --sendsms TEXT 07811xxxx
-        sudo mkdir -f /var/spool/gammu/inbox/
-        sudo mkdir -p /var/spool/gammu/inbox/
-        sudo mkdir -p /var/spool/gammu/outbox/
-        sudo mkdir -p /var/spool/gammu/sent/
-        sudo mkdir -p /var/spool/gammu/error/
-        sudo systemctl start gammu-smsd
-        sudo systemctl status gammu-smsd
-        gammu-smsd-inject TEXT 07811xxxxx -unicode -text "Hellow from d"
 
 ## wwlan0
 
@@ -134,38 +84,6 @@ USB Modem 12d1:1436
 
 If mode switing is required then its something like this.
 sudo usb_modeswitch -v 0x12d1 -p 0x1446 -M 55534243000000000000000000000011060000000000000000000000000000 -V 0x12d1 -P 0x1436 -s 50 -m 0x01
-
-
-# gammu-smsd
-
-holds onto file handles while modems restart, and so needs to depend on the modem serial port so that when it goes, so does gammu-smsd
-
-get the name of the serial port from systemdctl list-units --all
-
-
-
-        cat << EOF > /lib/systemd/system/gammu-smsd.service 
-        [Unit]
-        Description=SMS daemon for Gammu
-        Documentation=man:gammu-smsd(1)
-        After=mysql.service postgresql.service network-online.target dev-serial-by\x2did-usb\x2dHUAWEI_Technology_HUAWEI_Mobile\x2dif04\x2dport0.device 
-        Requires=dev-serial-by\x2did-usb\x2dHUAWEI_Technology_HUAWEI_Mobile\x2dif04\x2dport0.device 
-
-        [Service]
-        EnvironmentFile=-/etc/sysconfig/gammu-smsd
-        # Run daemon as root user
-        ExecStart=/usr/bin/gammu-smsd --pid=/var/run/gammu-smsd.pid --daemon
-        # Run daemon as non-root user (set user/group in /etc/sysconfig/gammu-smsd)
-        #ExecStart=/usr/bin/gammu-smsd --user= --group= --pid=/var/run/gammu-smsd.pid --daemon
-        ExecReload=/bin/kill -HUP $MAINPID
-        ExecStopPost=/bin/rm -f /var/run/gammu-smsd.pid
-        Type=forking
-        PIDFile=/var/run/gammu-smsd.pid
-
-        [Install]
-        WantedBy=multi-user.target
-        EOF
-
 
 
 # 3G Internet
@@ -246,7 +164,9 @@ Once installed the build took well over 1h to run on the pi. Not really big enou
 # Todo
 
 [x] Use GPS tty directly in node to reduce cpu usage - total fail. node uses 76% using serialport and very simple processing, gpsd uses 15%, stick with gpsd.
-[ ] Make gammu-smsd stable when USB fails or use gammu cli or go direct to tty.
+[x] Make gammu-smsd stable when USB fails or use gammu cli or go direct to tty - went direct to modem using seralport-gsm node module which is well supported and works.
+[ ] Implement sync upload
+[ ] Do periodic restart on gpsd which seems to hang, perhaps a periodic reboot would be better.
 [ ] add systemd service for the tracker logger
 [ ] decide how to sync time, probably ntpd on start if the gpsd doesnt do it.
 [ ] create uploader in node and run periodically or on demand from sms message.

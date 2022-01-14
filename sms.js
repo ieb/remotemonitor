@@ -1,3 +1,4 @@
+const serialportgsm = require('serialport-gsm')
 
 const { exec, spawn } = require('child_process');
 const process = require('process');
@@ -5,24 +6,149 @@ const path = require('path');
 
 class SMS {
     constructor(config) {
+        this.port = config.port;
+        this.options = {
+            baudRate: 115200,
+            dataBits: 8,
+            stopBits: 1,
+            parity: 'none',
+            rtscts: false,
+            xon: false,
+            xoff: false,
+            xany: false,
+            autoDeleteOnReceive: true,
+            enableConcatenation: true,
+            incomingCallIndication: true,
+            incomingSMSIndication: true,
+            pin: '',
+            customInitCommand: '',
+            logger: console
+        };
+        this.allowedFrom = config.allowedFrom;
+        this.handler = {};
+
+
+/*
         this.demoMode = config.demoMode || false;        
         this.state = 0;
         this.message = {};
-        this.allowedFrom = config.allowedFrom;
-        this.processSMS = this.processSMS.bind(this);
-        this.dequeueMessage = this.dequeueMessage.bind(this);
-        this.deleteMessage = this.deleteMessage.bind(this);
         this.messagesToProcess = [];
         this.queueIndex = {};
         this.processedIndex = {};
-        this.handler = {};
         this.dequeueDelay = config.dequeueDelay || 10000;
         this.checkDelay = config.checkDelay || 30000;
         this.deleteMessageDelay = config.deleteMessageDelay || 5000;
         this.gammuConfig = config.gammuConfig || '/etc/gammu-smsd';
-        this.dequeueMessage();
-        this.deleteMessage();
+        */
 
+    }
+
+    open(cb) {
+        if (this.modem) {
+            this.modem.close(() => {
+                this.modem = undefined;
+                this.begin(cb);
+            });
+        } else {
+            this.begin(cb);
+        }
+    }
+    begin(cb) {
+        const that = this;
+        this.modem = serialportgsm.Modem();
+        this.modem.on("error", err => {
+            console.log("Error",err);
+        });
+        this.modem.on("close", closeResult => {
+            console.log("Close",closeResult);
+        });
+        this.modem.on('onNewMessage', messageDetails =>  {
+            console.log("newMessage",messageDetails);
+            if (that.allowedFrom[messageDetails.sender]) {
+                    const message = messageDetails.message.trim().toLowerCase();
+                    if ( that.handler[message]) {
+                        const response = that.handler[message]();
+                        that.modem.sendSMS(that.allowedFrom[messageDetails.sender],response, false, (msg, err) => {
+                            console.log("Send Message",msg,err);
+                        });
+                    } else {
+                        const response = "Expected one of "+Object.keys(that.handler);
+                        that.modem.sendSMS(that.allowedFrom[messageDetails.sender],response, false, (msg, err) => {
+                            console.log("Sent Help message",msg,err);
+                        });
+                    }
+            } else {
+                console.log("Not allowed");
+            }
+        });
+        this.modem.on('onNewMessageIndicator', (sender, timeSent) => { 
+            console.log("onNewMessageIndicator",sender,timeSent);
+
+        });
+        this.modem.on('onNewIncomingCall', (number, numberScheme) => {  
+            console.log("3G: Inbound call from ",number, numberScheme);
+            that.modem.hangupCall(() => {
+                console.log("3G: Hungup Inbound call from ",number);
+            });
+        });
+        this.modem.on('onMemoryFull', (status, data) => { 
+            console.log("Memory Full", status, data);
+
+         });
+
+
+        this.modem.on('open', () => {
+            console.log(`Modem Sucessfully Opened`);
+            console.log(`Start Initialise Modem`);
+            that.modem.initializeModem((msg,err) => {
+                if(err) {
+                    console.log(`Failed Initialise modem ${err}`);
+                    cb(err);
+                } else {
+                    console.log(`InitModemResponse: ${JSON.stringify(msg)}`);
+                    that.modem.setModemMode((msg,err) => {
+                            if(err) {
+                                console.log(`Failed to Set Modem Mmode modem ${err}`);
+                                cb(err);
+                            } else {
+                                console.log(`Set Modem Mode Modem Result: ${JSON.stringify(msg)}`);
+                                that.modem.checkModem((msg,err) => {
+                                        if(err) {
+                                            console.log(`Failed to Check modem ${err}`);
+                                            cb(err);
+                                        } else {
+                                            console.log(`Check Modem Result: ${JSON.stringify(msg)}`);
+                                            that.modem.checkSimMemory((msg, err) => {
+                                                if ( err) {
+                                                    console.log(`Failed to Check Sim memory ${err}`);
+                                                    cb(err);
+                                                } else {
+                                                    console.log(`Check Sim Memory Result: ${JSON.stringify(msg)}`);
+
+                                                    that.modem.getSimInbox((result, err) => {
+                                                        if(err) {
+                                                            console.log(`Failed to get SimInbox ${err}`);
+                                                            cb(err);
+                                                        } else {
+                                                            console.log(`Sim Inbox Result: ${JSON.stringify(result)}`);
+                                                            for (var m of result.data) {
+                                                                console.log("Deleting ",m);
+                                                                this.modem.deleteMessage(m, (msg, err) => {
+                                                                    console.log("Deleted",msg,err);
+                                                                });
+                                                            }        
+                                                        }
+                                                    });
+                                                }
+                                            });
+                                        }
+                                    });
+                                }
+                        }, 'PDU');	
+                }
+            });
+        })
+        this.modem.open(this.port, this.options);
     }
 
 
@@ -30,309 +156,29 @@ class SMS {
         this.handler[command] = handler;
     }
 
-    processSMS() {
-        const that = this;
-        this.state = 0;
-        this.message = {};
-        var getsms = undefined;
-        if ( this.demoMode ) {
-            getsms = spawn("cat", ["testsms.txt"]/*gammu",["-c","/etc/gammu-smsdrc","getallsms","-pbk"]*/);            
-        } else {
-            getsms = spawn("gammu",["-c",this.gammuConfig,"getallsms","-pbk"]);            
-        }
-        var buffer = "";
-        getsms.stdout.on('data', (data) => {
-            buffer = that.processData(buffer, data.toString());
-        });       
-        getsms.stderr.on('data', (data) => {
-            console.log("gammuu getallsms stderr",error);
-        });       
-        getsms.on('error', (error) => {
-            console.log("gammuu getallsms error",error);
-        });
-        getsms.on('close', (code) => {
-            if ( code != 0) {
-                console.log("gammuu getall sms non zero exit",code);
-            }
-            that.processData(buffer,"\n ");
-            console.log("Processing inbox complete");
-            setTimeout(that.processSMS, that.checkDelay);
-        });
-    }
 
-    processData(buffer, data) {
-        buffer = buffer + data;
-        const lines = buffer.split("\n");
-        for(var i = 0; i < lines.length-1; i++) {
-            this.processLine(lines[i]);
-        }
-        return lines[lines.length-1];
-    }
-
-    processLine(line) {
-        line = line.trim();
-        switch(this.state) {
-            case 0:
-                if (line.startsWith("Location ")) {
-                    this.message.location = this.parseLocation(line);
-                    this.state = 1;
-                }
-                break;
-            case 1: // headers
-                if ( line.length == 0) {
-                    this.state = 2; // message
-                    this.message.body = "";
-                } else if ( line == "Empty" ) {
-                    this.enqueueMessage(this.message);
-                    this.state = 0; // next location.
-                } else if ( line.startsWith("SMSC number")) {
-                    this.message.smsc = this.parseHeader(line);
-                } else if ( line.startsWith("Sent")) {
-                    this.message.dateSent = this.parseHeader(line);
-                } else if ( line.startsWith("Coding")) {
-                    this.message.coding = this.parseHeader(line);
-                } else if ( line.startsWith("Remote number")) {
-                    this.message.from = this.parseHeader(line);
-                } else if ( line.startsWith("Status")) {
-                    this.message.status = this.parseHeader(line);
-                } else if (line.startsWith("Location ")) {
-                    this.message.location = this.parseLocation(line);
-                    this.message.body = "";
-                    this.enqueueMessage(this.message);
-                    this.message = {};
-                }
-                break;
-            case 2:
-                if ( line.length == 0 ) {
-                    this.message.body = this.message.body.trim();
-                    this.enqueueMessage(this.message);
-                    this.message = {};
-                    this.state = 0;
-                } else if (line.startsWith("Location ")) {
-                    // new location, save what we have
-                    this.message.body = this.message.body.trim();
-                    this.enqueueMessage(this.message);
-                    this.message = {};
-                    this.message.location = this.parseLocation(line);
-                    this.state = 1;
-                } else {
-                    this.message.body = this.message.body+line;
-                }
-                break;
-        }
-    }
-
-    parseLocation(line) {
-        line = line.split(",");
-        return line[0].slice("Location ".length);
-    }
-
-    parseHeader(line) {
-        line = line || "";
-        const parts = line.split(":");
-        parts.shift();
-        const value = parts.join(':').trim();
-        if ( value.startsWith('"') ) {
-            return value.replaceAll('"',"");
-        }
-        return value;
-    }
-
-    enqueueMessage(message) {
-        if(this.allowedFrom[message.from]) {
-            if ( this.messagesToProcess.length > 20) {
-                console.log("Dropping Message, queue full ", message, this.messagesToProcess.length);
-            } else {
-                console.log("Queing message",  this.messagesToProcess.length, message);
-                this.pushQueue(JSON.parse(JSON.stringify(message)));    
-            }
-        } else {
-            console.log("Dropped ", message);
-        }
-    }
-
-    pushQueue(message) {
-        const messageKey = message.from+","+message.dateSent;
-        if ( this.queueIndex[messageKey] ) {
-            console.log("Duplicated Message not added to queue ",this.message);
-            
-        } else if (this.processedIndex[messageKey]) {
-            console.log("Duplicated Processed Message not added to queue ",this.message);
-        } else {
-            this.queueIndex[messageKey] = message;
-            this.messagesToProcess.push(message);
-            message.ts = new Date(message.dateSent).getTime();
-            console.log("Queue Now",this.messagesToProcess.length);    
-        }
-        // save the queue
-    }
-    popQueue() {
-        const message = this.messagesToProcess.shift();
-        const messageKey = message.from+","+message.dateSent;
-        delete this.queueIndex[messageKey];
-        console.log(JSON.stringify(this.messagesToProcess));
-        // save the queue;
-        return message;
-    }
-    processed(message) {
-        const messageKey = message.from+","+message.dateSent;
-        this.processedIndex[messageKey] = message;
-        var keys = Object.keys(this.processedIndex);
-        if ( keys.length === 0 ) {
-            
-        }
-        keys.sort((a,b) => {
-            return this.processedIndex[a].ts - this.processedIndex[b].ts; 
-        });
-        console.log("Processed record size ",keys.length," since ",this.processedIndex[keys[0]].dateSent);
-        if ( keys.length > 50) {
-            // remove the oldest 10, by sorting the timestamps and removing the fist 10 keys after sorting.
-            
-            for (var i = 0; i < 10; i++) {
-                delete this.processedIndex[keys[i]];
-            }
-        }
-
-    }
-    loadQueue() {
-
-    }
-
-    // dequeue and process a single message from the queue.
-    // if it fails place it back on the queue 
-    // if it suceeds place it on the processed message map.
-    dequeueMessage() {
-        var that = this;
-        if ( this.messagesToProcess.length > 0) {
-            const message = this.popQueue();
-            message.retries = message.retries || 0;
-            if ( this.handler[message.body]) {
-                this.handler[message.body](message, (response) => {
-                    if ( response.requeue) {
-                        console.log("Dequeue: requeue ",message);
-                        message.requeue++;
-                        that.pushQueue(message);
-                    } else if ( response.message && response.to ) {
-                        var sendsms = undefined;
-                        if (that.demoMode) {
-                            sendsms = spawn("cat");
-
-                        } else {
-                            sendsms = spawn('gammu',['-c',that.gammuConfig,'--sendsms','TEXT',response.to]);
-                        }
-                        if (that.demo)
-                        sendsms.stdout.on('data', (data) => {
-                            console.log("sensms stdout:",data.toString());
-                        });
-                            
-                        sendsms.stderr.on('data', (data) => {
-                            console.error(`sendsms stderr: ${data}`);
-                        });       
-                        sendsms.on('error', (error) => {
-                            // add a retry to the message, dont deleted
-                        });
-                        sendsms.on('close', (code) => {
-                            // delete the message and mark as done.
-                            if ( code != 0) {
-                                message.retries++;
-                                if ( message.retries < 5) {
-                                    console.log("Dequeue: retrying ",message);
-                                    that.pushQueue(message);
-                                } else {
-                                    that.processed(message);
-                                    console.log("Dequeue: Failed to handle ",message);
-                                }
-                            } else {
-                                that.processed(message);
-                                console.log("Dequeue: Handled ",message, response);
-                            }
-                        });
-                        sendsms.stdin.write(response.message);
-                        sendsms.stdin.end();    
-                    } else {
-                        that.processed(message);
-                        console.log("Dequeue: Handled no response ",message);
-                    }
-                });
-            } else {
-                that.processed(message);
-                console.log("Dequeue: No handler for ",message);
-            }    
-        } else {
-            console.log("Dequeue: No messages to process");
-        }
-        setTimeout(this.dequeueMessage, this.dequeueDelay);      
-        
-    }
-
-    /**
-     * delete the oldest message from the inbox and mark as deleted in the store.
-     */
-    deleteMessage() {
-        var that = this;
-        var keys = Object.keys(this.processedIndex);
-        keys.sort((a,b) => {
-            return this.processedIndex[a].ts - this.processedIndex[b].ts; 
-        });
-
-        for (var k of keys ) {
-            var m = this.processedIndex[k];
-            if ( !m.inboxDeleted ) {
-                var cmd = undefined;
-                if ( this.demoMode) {
-                    cmd = `echo delete messages ${m.location} `;
-                } else {
-                    cmd = `gammu -c ${this.gammuConfig} deletesms 1 ${m.location}`;
-                }
-                exec(cmd, (error, stdout, stderr) => {
-                    if ( !error) {
-                        m.inboxDeleted = true;
-                    }
-                    console.log("delete message Error ", error);
-                    console.log("delete message Stdout: ", stdout);
-                    console.log("delete message stderr: ", stderr);
-                });
-                break;
-            }
-        }
-        setTimeout(that.deleteMessage, this.deleteMessageDelay);
-    }
 };
 
 if ( path.basename(process.argv[1]) ==  "sms.js" ) {
-
-    const sms = new SMS({
-        dequeueDelay: 10000,
-        checkDelay: 30000,
-        demoMode: true,
-        allowedFrom: {
-            "+44123123123": true
+    const data = {
+        pos: {
+            lat: 52.32342,
+            lon: 1.234242
+        },
+        bme280: {
+            t: 2.21,
+            p: 1024.3,
+            h: 45
         }
+    };
+    const config = require("./config.js");
+    const sms = new SMS(config);
+    sms.addHandler("status", () => {    
+        return `lat:${data.pos.lat} lon:${data.pos.lon} temp:${data.bme280.t} pressure:${data.bme280.p} rh:${data.bme280.h} https://www.google.com/maps/search/?api=1&query=${data.pos.lat}%2C${data.pos.lon}`;
     });
-    sms.addHandler("status", (message, cb) => {    
-        cb({
-            message: `lat:${data.pos.lat} lon:${data.pos.lon} temp:${data.bme280.t} pressure:${data.bme280.p} rh:${data.bme280.h} https://www.google.com/maps/search/?api=1&query=${this.data.pos.lat}%2C${this.data.pos.lon}`,
-            to: message.from
-        });
+    sms.open((err) => {
+        console.log("Modem Errror",err);
     });
-    sms.addHandler("Status", (message, cb) => {    
-        message.requeue = message.requeue || 0;
-        if (message.requeue < 3) {
-            cb({
-                requeue: true
-            });
-        } else {
-            console.log("Got Status");
-            cb({
-                message: `All Ok`,
-                to: message.from
-            });    
-        }
-    });
-
-
-    sms.processSMS();
-
 } else {
     console.log(process.argv);
     module.exports = {
