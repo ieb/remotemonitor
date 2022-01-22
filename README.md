@@ -7,6 +7,9 @@ turn on i2c, 1 wire,
 
 ## gpsd setup
 
+Could use the tty directly and parse the NMEA stream, however when this was tried with serialport the 
+cpu load was at 76%, whereas with gpsd its at 15%, so going with gpsd for the moment.
+
         sudo apt-get install gpsd gpsd-clients
         sudo adduser pi dialout
 
@@ -32,6 +35,8 @@ turn on i2c, 1 wire,
 ## SMS
 
 Tried to use gammu, but it was unreliable so sms handling is done in node which seems very reliable.
+
+Used https://www.npmjs.com/package/serialport-gsm
 
 
         See https://wiki.dd-wrt.com/wiki/index.php/Mobile_Broadband#Huawei for prefered user port.
@@ -142,14 +147,28 @@ To start ppp0, then ping 8.8.8.8, the packet latency should be different from wi
 
 
 
-## Install sikta to interact with google drive
+## Upload data periodically
+
+Perfiosly used go get github.com/google/skicka but that has a 400MB footprint installing go and takes forever to install
+
+https://developers.google.com/drive/api/v3/quickstart/nodejs
+
+now uses node drive.js which uploads from a crontab
+
+## Crontabs
+
+one of periodic upload.
 
 
-        sudo apt-get install golang
-        go get github.com/google/skicka
+## service
 
-Gave up, takes too long and needs 400MB of disk to install go.
-Once installed the build took well over 1h to run on the pi. Not really big enough for building go binaries.
+        npm install pm2 -g
+        pm2 startup
+        pm2 start index.js
+        pm2 save
+
+
+
 
 ## Install node and npm
 

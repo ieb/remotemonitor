@@ -6,6 +6,7 @@ var i2c = require('i2c-bus');
 
 var BME280 = function(options) {
     options = options || {};
+    this.debug = options.debug;
     this.bus = (options.bus===undefined)?1:options.bus;
     this.debug = options.debug || false;
   
@@ -20,6 +21,7 @@ BME280.prototype.end = function() {
 
 BME280.prototype.begin = function(callback) {
     var that = this;
+    console.log("BME280 Address is ","0x"+this.address.toString(16));
     this.wire = i2c.open(that.bus, (err) => {
         if ( err ) {
             callback(err);
@@ -39,7 +41,7 @@ BME280.prototype.begin = function(callback) {
                         that.wire.writeByte(that.address, BME280.REGISTER_CTRL_HUM, 0x01, function(err) {
                             // overscan temp 1, overscan pressure 4
                             that.wire.writeByte(that.address, BME280.REGISTER_CONTROL, 0x3F, function(err) {
-                                callback(err, value === BME280.CHIP_ID_BME?"BME280 with Humidity":"BMP280 no Humidity");
+                                callback(err, value === BME280.CHIP_ID_BME?`BME280(decimal ${value}) with Humidity`:`BMP280(decimal ${value}) no Humidity`);
                             });
                         });
                     });
@@ -146,6 +148,7 @@ BME280.prototype.readCoefficients = function(callback) {
 
 BME280.prototype.readPressureAndTemparature = function(callback) {
     var calibration = this.calibration;
+    const selt = this;
 
     //read temp and pressure data in one stream;
     const buffer = Buffer.alloc(8);
@@ -158,6 +161,18 @@ BME280.prototype.readPressureAndTemparature = function(callback) {
         var pressure = BME280.compensatePressure(rawPressure, t_fine, calibration);
         var temperature = BME280.compensateTemperature2(t_fine, calibration);
         var Humidity = BME280.compensateHumidity(rawHum, t_fine, calibration);
+        if ( self.debug ) {
+            console.log("Response from chip from registers 0xF7 (pressure), 0xFA (temperature), 0xFD (humidity) ", "0x"+buffer.toString('hex'));
+            console.log("Raw Pressure reading as unit16 ",rawPressure);
+            console.log("Raw Temperature reading as unit16 ",rawTemp);
+            console.log("Raw Humidity reading as unit16 ",rawHum);
+            console.log("Calibration: t_fine temperature compensation ",t_fine);
+            console.log("Calibration: calibration values from chip register 0x1E ",calibration);
+            console.log("Calibrated Pressure: ",pressure);
+            console.log("Calibrated temperature: ",temperature);
+            console.log("Calibrated Humidity: ",Humidity);
+        }
+        
         
         callback(null, pressure, temperature, Humidity);
     });
@@ -224,4 +239,29 @@ BME280.compensateHumidity = function(adc_H, h_fine, cal) {
      return var_h;
 };
 
-module.exports = BME280;
+if (module === require.main) {
+    var barometer = new BME280({address: 0x76, debug: true});
+    barometer.begin((err, type) =>{
+        if ( err ) {
+            console.log("Failed to init BMx280 sensor ",err);
+            barometer = undefined;
+        } else {
+            console.log("Initialised ",type);
+            barometer.readPressureAndTemparature((err, pressure, temperature, humidity) => {
+                if ( err ) {
+                    console.log("Error Reading BMP280 ",err);
+                } else {
+                    console.log("Pressure in mbar ",(pressure/100));
+                    console.log("Temperature in C",temperature);
+                    console.log("Humidity in %RH",humidity);
+                    console.log("Date",new Date().toUTCString());
+                }
+            });
+        }
+    });
+
+} else {
+      module.exports = BME280;
+}
+  
+  

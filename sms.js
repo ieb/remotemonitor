@@ -22,7 +22,7 @@ class SMS {
             incomingSMSIndication: true,
             pin: '',
             customInitCommand: '',
-            logger: console
+            logger: undefined
         };
         this.allowedFrom = config.allowedFrom;
         this.handler = {};
@@ -67,9 +67,10 @@ class SMS {
             if (that.allowedFrom[messageDetails.sender]) {
                     const message = messageDetails.message.trim().toLowerCase();
                     if ( that.handler[message]) {
-                        const response = that.handler[message]();
-                        that.modem.sendSMS(that.allowedFrom[messageDetails.sender],response, false, (msg, err) => {
-                            console.log("Send Message",msg,err);
+                        that.handler[message]((response) => {
+                            that.modem.sendSMS(that.allowedFrom[messageDetails.sender],response, false, (msg, err) => {
+                                console.log("Send Message",msg,err);
+                            });    
                         });
                     } else {
                         const response = "Expected one of "+Object.keys(that.handler);
@@ -173,8 +174,8 @@ if ( path.basename(process.argv[1]) ==  "sms.js" ) {
     };
     const config = require("./config.js");
     const sms = new SMS(config);
-    sms.addHandler("status", () => {    
-        return `lat:${data.pos.lat} lon:${data.pos.lon} temp:${data.bme280.t} pressure:${data.bme280.p} rh:${data.bme280.h} https://www.google.com/maps/search/?api=1&query=${data.pos.lat}%2C${data.pos.lon}`;
+    sms.addHandler("status", (cb) => {    
+        cb(`lat:${data.pos.lat} lon:${data.pos.lon} temp:${data.bme280.t} pressure:${data.bme280.p} rh:${data.bme280.h} https://www.google.com/maps/search/?api=1&query=${data.pos.lat}%2C${data.pos.lon}`);
     });
     sms.open((err) => {
         console.log("Modem Errror",err);

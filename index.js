@@ -5,6 +5,7 @@ const fs = require('fs');
 const sensors = require('ds18b20-raspi');  
 const config = require("./config");
 const {SMS} = require("./sms.js");
+const { Drive } = require('./drive');
 
 var dat = {
     pos : {
@@ -40,6 +41,7 @@ listener.on('TPV', function (tpv) {
             dat.pos.time = tpv.time;
         }
         dat.pos.m = tpv.mode;
+        dat.pos.ts = new Date().toUTCString();
     } else {
         // no fix
         dat.pos.nf = dat.pos.nf++;
@@ -62,10 +64,11 @@ barometer.begin((err, type) =>{
         barometer = undefined;
     } else {
         console.log("Initialised ",type);
+        updateBME280(() => {});
     }
 });
 
-function updateBME280() {
+function updateBME280(cb) {
     try {
         if (barometer) {
             barometer.readPressureAndTemparature((err, pressure, temperature, humidity) => {
@@ -75,20 +78,26 @@ function updateBME280() {
                     dat.bme280.p = (pressure/100).toFixed(1);
                     dat.bme280.t = temperature.toFixed(1);
                     dat.bme280.h = humidity.toFixed(1);
+                    dat.bme280.ts = new Date().toUTCString();
                 }
+                cb();
             });        
+        } else {
+            cb();
         }
     } catch (e) {
         console.log("Failed to read barrometer", e);
+        cb();
     }
 
 }
 
 
 
+
 // Read Temperatures
 
-function updateTemperatures() {
+function updateTemperatures(cb) {
     try {
         sensors.readAllC((err, temps) => {
             if (err) {
@@ -98,19 +107,27 @@ function updateTemperatures() {
                   dat.onewire[temps[i].id] = dat.onewire[temps[i].id] || {};
                   dat.onewire[temps[i].id].m = Date.now();
                   dat.onewire[temps[i].id].temp = temps[i].t;
+                  
                 }
+                dat.onewire.ts = new Date().toUTCString();
             }
+            cb();
           });
     } catch (e) {
         console.log("Failed reading 1 wire ",e);
+        cb();
     }
 }
 
+/*
 setInterval(() => {
-    updateTemperatures();
-    updateBME280();
-    console.log(dat);
+    updateTemperatures(() => {
+        updateBME280(() => {
+            console.log(dat);
+        });
+    });
 },60000);
+*/
 
 
 function pad2Zeros(n) {
@@ -122,15 +139,17 @@ function pad2Zeros(n) {
 // dump everything out.
 setInterval(() => {
     try {
-        updateBME280();
-        updateTemperatures();
-        dat.ts = Date.now();
-        var d = new Date();
-        var fname = "data/data-"+d.getFullYear()+pad2Zeros(d.getMonth()+1)+pad2Zeros(d.getDate())+".jsonlog";
-        fs.appendFile(fname,JSON.stringify(dat)+"\n", (err) => {
-            if ( err ) {
-                console.log("Failed to write to ", fname);
-            }
+        updateBME280(() => {
+            updateTemperatures(() => {
+                dat.ts = Date.now();
+                var d = new Date();
+                var fname = "data/data-"+d.getFullYear()+pad2Zeros(d.getMonth()+1)+pad2Zeros(d.getDate())+".jsonlog";
+                fs.appendFile(fname,JSON.stringify(dat)+"\n", (err) => {
+                    if ( err ) {
+                        console.log("Failed to write to ", fname);
+                    }
+                });        
+            });
         });
     } catch (e) {
         console.log("Failed saving data ",e);
@@ -141,10 +160,20 @@ setInterval(() => {
 // SMS Command processing
 
 const sms = new SMS(config);
-sms.addHandler("status", () => {    
-    updateBME280();
-    updateTemperatures();
-    return `lat:${dat.pos.lat} lon:${dat.pos.lon} temp:${dat.bme280.t} pressure:${dat.bme280.p} rh:${dat.bme280.h} https://www.google.com/maps/search/?api=1&query=${dat.pos.lat}%2C${dat.pos.lon}`;
+sms.addHandler("status", (cb) => {    
+    updateBME280(() => {
+        updateTemperatures(() => {
+            cb(`https://www.google.com/maps/search/?api=1&query=${dat.pos.lat}%2C${dat.pos.lon} lat:${dat.pos.lat} lon:${dat.pos.lon} at:${dat.pos.ts} temp:${dat.bme280.t} pressure:${dat.bme280.p} rh:${dat.bme280.h} `);
+        });
+
+    });
+});
+sms.addHandler("full", (cb) => {    
+    updateBME280(() => {
+        updateTemperatures(() => {
+            cb(JSON.stringify(dat,null,2));
+        });
+    });
 });
 sms.open((err) => {
     console.log("Modem Errror",err);
