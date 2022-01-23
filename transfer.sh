@@ -1,9 +1,9 @@
 #!/bin/bash
 basedir=`dirname $0`
 cd $basedir
-(
 gzip transfer.log
 cp transfer.log.gz data/
+(
 sudo ifup ppp0
 sleep 5
 ip r
@@ -20,6 +20,8 @@ else
    echo "no changes"
 fi
 ls -ltra ~/.pm2/logs 
+echo "Error Log "
 tail -100 ~/.pm2/logs/index-error.log 
+echo "Output Log "
 tail -100 ~/.pm2/logs/index-out.log 
 ) 1>&2 1> transfer.log

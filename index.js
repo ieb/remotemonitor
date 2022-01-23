@@ -1,4 +1,7 @@
 
+console.log("Startup ", new Date());
+console.error("Startup ", new Date());
+
 const gpsd = require('node-gpsd');
 const BME280 = require('./BME280');
 const fs = require('fs');
