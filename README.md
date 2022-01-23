@@ -190,5 +190,5 @@ one of periodic upload.
 * [x] decide how to sync time, probably ntpd on start if the gpsd doesnt do it.
 * [x] create uploader in node and run periodically or on demand from sms message.
 
-
+testingZZ
 
