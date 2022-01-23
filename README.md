@@ -182,13 +182,13 @@ one of periodic upload.
 
 # Todo
 
-[x] Use GPS tty directly in node to reduce cpu usage - total fail. node uses 76% using serialport and very simple processing, gpsd uses 15%, stick with gpsd.
-[x] Make gammu-smsd stable when USB fails or use gammu cli or go direct to tty - went direct to modem using seralport-gsm node module which is well supported and works.
-[ ] Implement sync upload
-[ ] Do periodic restart on gpsd which seems to hang, perhaps a periodic reboot would be better.
-[ ] add systemd service for the tracker logger
-[ ] decide how to sync time, probably ntpd on start if the gpsd doesnt do it.
-[ ] create uploader in node and run periodically or on demand from sms message.
+* [x] Use GPS tty directly in node to reduce cpu usage - total fail. node uses 76% using serialport and very simple processing, gpsd uses 15%, stick with gpsd.
+* [x] Make gammu-smsd stable when USB fails or use gammu cli or go direct to tty - went direct to modem using seralport-gsm node module which is well supported and works.
+* [x] Implement sync upload
+* [x] Do periodic restart on gpsd which seems to hang, perhaps a periodic reboot would be better.
+* [x] add systemd service for the tracker logger
+* [x] decide how to sync time, probably ntpd on start if the gpsd doesnt do it.
+* [x] create uploader in node and run periodically or on demand from sms message.
 
 
 
