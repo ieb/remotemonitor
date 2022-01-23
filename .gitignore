@@ -5,3 +5,4 @@ data
 secrets
 transfer.log
 transfer.log.gz
+testtransfer.sh
