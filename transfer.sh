@@ -19,4 +19,7 @@ then
 else
    echo "no changes"
 fi
+ls -ltra ~/.pm2/logs 
+tail -100 ~/.pm2/logs/index-error.log 
+tail -100 ~/.pm2/logs/index-out.log 
 ) 1>&2 1> transfer.log

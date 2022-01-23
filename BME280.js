@@ -148,7 +148,7 @@ BME280.prototype.readCoefficients = function(callback) {
 
 BME280.prototype.readPressureAndTemparature = function(callback) {
     var calibration = this.calibration;
-    const selt = this;
+    const self = this;
 
     //read temp and pressure data in one stream;
     const buffer = Buffer.alloc(8);
