@@ -10,9 +10,9 @@ git fetch
 echo sudo ifdown ppp0
 git clean -d -f
 git status | grep "Your branch is behind 'origin/main'"
-if [[ $? -eq 0 ]]
+if [ $? -eq 0 ]
 then
    git merge origin/main
    echo pm2 restart index.js
 fi
-) 1>&2 1>> transfer.log
+) 1>&2 1> transfer.log
