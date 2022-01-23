@@ -58,7 +58,7 @@ class Drive {
         return hash.digest().toString("hex");
     }
 
-    async sync(sourceFolder, destinationContainer, extension, commandFile) {
+    async sync(sourceFolder, destinationContainer, extension) {
         console.log("Drive: Started Sync");
         const client = await this.auth.getClient();
                 
@@ -115,54 +115,9 @@ class Drive {
                 }
             }
         }
-        var exitCode = 0;
-        if ( commandFile && existingFiles[commandFile] ) {
-            const driveFile = existingFiles[commandFile];
-            const filePath = path.join(sourceFolder, commandFile);
-            const processedPath = path.join(sourceFolder, "processed-"+commandFile);
-            var download = true;
-            if ( existsSync(filePath) ) {
-                const md5 =  this.doMd5(filePath);
-                if ( driveFile.md5Checksum == md5 ) {
-                    download = false;
-                }
-            }
-            if ( download ) {
-                console.log("New command file");
-                await this.downloadFile(drive, driveFile, filePath);
-            }
-            var processCommand = true;
-            if ( existsSync(processedPath) ) {
-                const md5 = this.doMd5(processedPath);
-                if ( driveFile.md5Checksum == md5  ) {
-                    processCommand = false;
-                }
-            }
-            if (processCommand ) {
-                console.log("Processing new command file");
-                const command = JSON.parse(readFileSync(filePath, {encoding:"utf-8"}));
-                // for the moment we return an status and let the wrapper deal with it.
-                exitCode = command.code;
-                writeFileSync(processedPath,readFileSync(filePath));
-            }
-        } else {
-            console.log("No Command file");
-        }
         console.log("Sync Done ",new Date());
-        return exitCode;
+        return 0;
     }
-
-    async downloadFile(drive, driveFile, filePath) {          
-        var dest = fs.createWriteStream(filePath);
-        await drive.files.get({
-            fileId: driveFile.id,
-            alt: 'media'
-            }).on("data",d => {
-                progress += d.length;
-                console.log(`Downloaded ${progress} bytes`);
-            }).pipe(dest);
-    }
-
 
     async updateFile(drive, fileStat, filePath, fileName, driveFile) {
         const fileSize = fileStat.size;

@@ -2,6 +2,8 @@
 basedir=`dirname $0`
 cd $basedir
 (
+gzip transfer.log
+cp transfer.log.gz data/
 sudo ifup ppp0
 sleep 5
 ip r

@@ -4,3 +4,4 @@ package-lock.json
 data
 secrets
 transfer.log
+transfer.log.gz
