@@ -14,5 +14,7 @@ if [ $? -eq 0 ]
 then
    git merge origin/main
    echo pm2 restart index.js
+else
+   echo "no changes"
 fi
 ) 1>&2 1> transfer.log
