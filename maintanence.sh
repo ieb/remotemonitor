@@ -4,14 +4,14 @@ cd $basedir
 
 if [ -f reboot.enable ]
 then
-    rm reboot.enable
-    rm restart.enable
+    rm -f reboot.enable
+    rm -f restart.enable
     sudo shutdown -r now
     exit
 fi
 if [ -f restart.enable ]
 then
-    rm restart.enable
+    rm -f restart.enable
     pm2 restart index.js
 fi
 if [ -f ota.enable ]
