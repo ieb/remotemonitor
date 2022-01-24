@@ -178,8 +178,27 @@ sms.addHandler("full", (cb) => {
         });
     });
 });
+sms.addHandler("ota start", (cb) => {    
+    // start over the air update checking
+    fs.writeFileSync("ota.enable","enable");
+    cb("Ota Updates Enabled");
+});
+sms.addHandler("ota stop", (cb) => {    
+    // stop over the air update checking
+    fs.writeFileSync("ota.enable","disable");
+    cb("Ota Updates Disable");
+});
+sms.addHandler("restart", (cb) => {    
+    // restart
+    fs.writeFileSync("restart.enable","enable");
+    cb("restart scheduled");
+});
+sms.addHandler("reboot", (cb) => {    
+    // reboot the os on demand
+    fs.writeFileSync("reboot.enable","enable");
+    cb("reboot scheduled");
+});
 sms.open((err) => {
     console.log("Modem Errror",err);
 });
-
 
