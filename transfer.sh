@@ -27,6 +27,7 @@ then
    echo "$(date) Code changes, restart"
    git merge origin/main
    pm2 restart index.js
+   sleep 30
 else
    echo "no changes"
 fi
