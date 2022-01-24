@@ -7,6 +7,7 @@ then
     rm reboot.enable
     rm restart.enable
     sudo shutdown -r now
+    exit
 fi
 if [ -f restart.enable ]
 then
@@ -15,20 +16,27 @@ then
 fi
 if [ -f ota.enable ]
 then
-    ota=$(cat ota.enable)
-    if [ a$ota == "aenable" ]
+    ota=$(grep enable ota.enable)
+    if [ $? -eq 0 ]
     then
         cat ota.log | gzip  > data/ota.log.gz      
         (
             echo "$(date) Starting OTA Update"
-            sudo ifup ppp0
-            sleep 5
+            ipuprequired=$(ip r | grep -c 'default via 192.168.2')
+            if [ $ipuprequired -eq 0 ]
+            then
+                sudo ifup ppp0
+                sleep 5
+            fi
             ip r
             echo "$(date) Transfering data up"
             node drive.js
             echo "$(date) Transfer Code update"
             git fetch
-            sudo ifdown ppp0
+            if [ $ipuprequired -eq 0 ]
+            then
+                sudo ifdown ppp0
+            fi
             echo "$(date) Start Code update"
             git clean -d -f
             git status | grep "Your branch is behind 'origin/main'"
