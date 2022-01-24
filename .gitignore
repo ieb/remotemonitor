@@ -5,5 +5,6 @@ data
 secrets
 transfer.log
 transfer.log.gz
+ota.log
 testtransfer.sh
 *.enable
