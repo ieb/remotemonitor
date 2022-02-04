@@ -5,6 +5,8 @@ class AM2320 {
         this.device = device || '/dev/i2c-1';
         this.address = address || 0x5c;
         this.i2c1 = undefined;
+        this.success = 0;
+        this.failure = 0;
 
     }
     async begin() {
@@ -71,6 +73,7 @@ class AM2320 {
         var diff = process.hrtime(this.lastUpdate);
         if ( diff[0] >= 2 ) {
             var i = 0;
+            var ok = false;
             for(; i < 5; i++) {
                 try {
                     await this.wake(); // wake up
