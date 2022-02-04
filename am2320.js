@@ -77,9 +77,9 @@ class AM2320 {
             for(; i < 5; i++) {
                 try {
                     await this.wake(); // wake up
-                    await this.delay(3);
+                    await this.delay(2);
                     await this.writeBytes(0x03, [0x00, 0x04]); 
-                    await this.delay(3);
+                    await this.delay(2);
                     this.lastValue = await this.readBytes(0x00,8);
                     ok = true;
                     break;    
