@@ -38,6 +38,7 @@ then
                 sudo ifdown ppp0
             fi
             echo "$(date) Start Code update"
+            git reset --hard
             git clean -d -f
             git status | grep "Your branch is behind 'origin/main'"
             if [ $? -eq 0 ]
