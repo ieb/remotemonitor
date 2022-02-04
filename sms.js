@@ -1,8 +1,10 @@
+require( 'trace-unhandled/register' ); // As early as possible
 const serialportgsm = require('serialport-gsm')
 
 const { exec, spawn } = require('child_process');
 const process = require('process');
 const path = require('path');
+const { exit } = require('process');
 
 class SMS {
     constructor(config) {
@@ -43,15 +45,16 @@ class SMS {
 
     }
 
-    open(cb) {
+    async open() {
         if (this.modem) {
-            this.modem.close(() => {
-                this.modem = undefined;
-                this.begin(cb);
+            await new Promise((resolve, reject) => {
+                this.modem.close(() => {
+                    resolve();
+                });
             });
-        } else {
-            this.begin(cb);
+            this.modem = undefined;
         }
+        await this.begin();
     }
     scheduleReset(message, inms) {
         const that = this;
@@ -61,8 +64,8 @@ class SMS {
         }
         this.resetTimeout = setTimeout(() => {
             console.log(message);
-            that.open((err) => {
-                console.log("Reset error:",err);
+            that.open().catch(err => {
+                console.log("SMS Reset error:",err);
             });
         },inms)
     }
@@ -74,20 +77,19 @@ class SMS {
         }
         this.hardResetTimeout = setTimeout(() => {
             console.log(message);
-            that.open((err) => {
-                console.log("Reset error:",err);
+            that.open().catch(err => {
+                console.log("SMS Reset error:",err);
             });
-        },inms)
+        },inms);
     }
-    begin(cb) {
+    async begin() {
         const that = this;
-        this.modem = serialportgsm.Modem();
-        
+        this.modem = serialportgsm.Modem();        
         this.modem.on("error", err => {
-            console.log("Error",err);
+            console.log("SMS Error",err);
         });
         this.modem.on("close", closeResult => {
-            console.log("Close",closeResult);
+            console.log("SMS lose",closeResult);
         });
         this.modem.addListener({
             match: (message) => {
@@ -109,7 +111,7 @@ class SMS {
                     console.log("SMS reset in 10s after ppp down");
                     that.scheduleHardReset("ppp down",10000);    
                 } else if ( message.startsWith("^MODE:5,")) { 
-                    console.log("ppp up");
+                    console.log("SMS ppp up");
                 } else if ( message.startsWith("^DSFLOWRPT:")) {
                     // ^DSFLOWRPT:0000000E,00003C9E,000004E6,0000000000009906,000000000000537C,00107AC0,00107AC0
                     /*
@@ -132,7 +134,7 @@ class SMS {
                     for(var i = 1; i < flrptFlds.length; i++) {
                         flrptFlds[i] = ((flrptFlds[i]*8)/1000).toFixed(0);
                     }
-                    console.log(`ppp uptime:${flrptFlds[0]}s ${flrptFlds[1]}/${flrptFlds[1]}kb/s ${flrptFlds[3]}/${flrptFlds[4]*8}kb link:${flrptFlds[6]}/${flrptFlds[4]*8}kb/s `);
+                    console.log(`SMS ppp uptime:${flrptFlds[0]}s ${flrptFlds[1]}/${flrptFlds[1]}kb/s ${flrptFlds[3]}/${flrptFlds[4]*8}kb link:${flrptFlds[6]}/${flrptFlds[4]*8}kb/s `);
                 }
             }
         });
@@ -143,18 +145,19 @@ class SMS {
                     const message = messageDetails.message.trim().toLowerCase();
                     if ( that.handler[message]) {
                         that.handler[message]((response) => {
+
                             that.modem.sendSMS(that.allowedFrom[messageDetails.sender],response, false, (msg, err) => {
-                                console.log("Send Message",msg,err);
+                                console.log("SMS Send Message",msg,err);
                             });    
                         });
                     } else {
                         const response = "Expected one of "+Object.keys(that.handler);
                         that.modem.sendSMS(that.allowedFrom[messageDetails.sender],response, false, (msg, err) => {
-                            console.log("Sent Help message",msg,err);
+                            console.log("SMS Sent Help message",msg,err);
                         });
                     }
             } else {
-                console.log("Not allowed");
+                console.log("SMS Not allowed");
             }
         });
         this.modem.on('onNewMessageIndicator', (sender, timeSent) => { 
@@ -162,71 +165,30 @@ class SMS {
 
         });
         this.modem.on('onNewIncomingCall', (number, numberScheme) => {  
-            console.log("3G: Inbound call from ",number, numberScheme);
+            console.log("SMS 3G: Inbound call from ",number, numberScheme);
             that.modem.hangupCall(() => {
-                console.log("3G: Hungup Inbound call from ",number);
+                console.log("SMS 3G: Hungup Inbound call from ",number);
             });
         });
         this.modem.on('onMemoryFull', (status, data) => { 
-            console.log("Memory Full", status, data);
+            console.log("SMS Memory Full", status, data);
 
          });
 
+        console.log("SMS Opening Modem");
+        await this.modem.open(this.port, this.options);
+        console.log("SMS Init Modem ",await this.modem.initializeModem());
+        console.log("SMS Set Modem Mode ",await this.modem.setModemMode('PDU'));
+        console.log("SMS Check Modem ",await this.modem.checkModem());
+        console.log("SMS Check Sim Memory ",await this.modem.checkSimMemory());
+        const inbox = await this.modem.getSimInbox();
+        for (var m of inbox.data) {
+            console.log("SMS Deleting ",m);
+            console.log("SMS Deleted ",await this.modem.deleteMessage(m));
+        }        
+        console.log("SMS Called Open Modem");
 
-        this.modem.on('open', () => {
-            console.log(`Modem Sucessfully Opened`);
-            console.log(`Start Initialise Modem`);
-            that.modem.initializeModem((msg,err) => {
-                if(err) {
-                    console.log(`Failed Initialise modem ${err}`);
-                    cb(err);
-                } else {
-                    console.log(`InitModemResponse: ${JSON.stringify(msg)}`);
-                    that.modem.setModemMode((msg,err) => {
-                            if(err) {
-                                console.log(`Failed to Set Modem Mmode modem ${err}`);
-                                cb(err);
-                            } else {
-                                console.log(`Set Modem Mode Modem Result: ${JSON.stringify(msg)}`);
-                                that.modem.checkModem((msg,err) => {
-                                        if(err) {
-                                            console.log(`Failed to Check modem ${err}`);
-                                            cb(err);
-                                        } else {
-                                            console.log(`Check Modem Result: ${JSON.stringify(msg)}`);
-                                            that.modem.checkSimMemory((msg, err) => {
-                                                if ( err) {
-                                                    console.log(`Failed to Check Sim memory ${err}`);
-                                                    cb(err);
-                                                } else {
-                                                    console.log(`Check Sim Memory Result: ${JSON.stringify(msg)}`);
-
-                                                    that.modem.getSimInbox((result, err) => {
-                                                        if(err) {
-                                                            console.log(`Failed to get SimInbox ${err}`);
-                                                            cb(err);
-                                                        } else {
-                                                            console.log(`Sim Inbox Result: ${JSON.stringify(result)}`);
-                                                            for (var m of result.data) {
-                                                                console.log("Deleting ",m);
-                                                                this.modem.deleteMessage(m, (msg, err) => {
-                                                                    console.log("Deleted",msg,err);
-                                                                });
-                                                            }        
-                                                        }
-                                                    });
-                                                }
-                                            });
-                                        }
-                                    });
-                                }
-                        }, 'PDU');	
-                }
-            });
-        })
-        this.modem.open(this.port, this.options);
     }
-
 
     addHandler(command, handler) {
         this.handler[command] = handler;
@@ -235,7 +197,7 @@ class SMS {
 
 };
 
-if ( path.basename(process.argv[1]) ==  "sms.js" ) {
+if (module === require.main) {
     const data = {
         pos: {
             lat: 52.32342,
@@ -252,8 +214,12 @@ if ( path.basename(process.argv[1]) ==  "sms.js" ) {
     sms.addHandler("status", (cb) => {    
         cb(`lat:${data.pos.lat} lon:${data.pos.lon} temp:${data.bme280.t} pressure:${data.bme280.p} rh:${data.bme280.h} https://www.google.com/maps/search/?api=1&query=${data.pos.lat}%2C${data.pos.lon}`);
     });
-    sms.open((err) => {
-        console.log("Modem Errror",err);
+    sms.open().then(() => {
+        console.log("Modem Open");
+    }).catch(err => {
+        console.log("Modem Error", err);
+        console.log("Exiting");
+        exit();
     });
 } else {
     console.log(process.argv);
