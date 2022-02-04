@@ -70,12 +70,19 @@ class AM2320 {
         const tnow = process.hrtime();
         var diff = process.hrtime(this.lastUpdate);
         if ( diff[0] >= 2 ) {
-            await this.wake(); // wake up
-            await this.delay(3);
-            await this.writeBytes(0x03, [0x00, 0x04]); 
-            await this.delay(3);
-            this.lastValue = await this.readBytes(0x00,8);
-            console.log("AM2320 Success");
+            for(var i = 0; i < 2; i++) {
+                try {
+                    await this.wake(); // wake up
+                    await this.delay(3);
+                    await this.writeBytes(0x03, [0x00, 0x04]); 
+                    await this.delay(3);
+                    this.lastValue = await this.readBytes(0x00,8);
+                    console.log("AM2320 Success");
+                    break;    
+                } catch (e) {
+                    console.log("AM2320 read attempt failed ",i,e);
+                }
+            }
             this.lastUpdate = process.hrtime();    
         } 
         return this.lastValue;
