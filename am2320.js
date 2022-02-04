@@ -75,6 +75,7 @@ class AM2320 {
             await this.writeBytes(0x03, [0x00, 0x04]); 
             await this.delay(3);
             this.lastValue = await this.readBytes(0x00,8);
+            console.log("AM2320 Success");
             this.lastUpdate = process.hrtime();    
         } 
         return this.lastValue;
