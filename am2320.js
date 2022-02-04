@@ -77,12 +77,13 @@ class AM2320 {
                     await this.writeBytes(0x03, [0x00, 0x04]); 
                     await this.delay(3);
                     this.lastValue = await this.readBytes(0x00,8);
-                    console.log("AM2320 Success");
+                    console.log("AM2320 Success ",i);
                     break;    
                 } catch (e) {
                     console.log("AM2320 read attempt failed ",i,e);
                 }
             }
+            console.log("AM2320 Done ");
             this.lastUpdate = process.hrtime();    
         } 
         return this.lastValue;
