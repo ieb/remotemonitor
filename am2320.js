@@ -71,9 +71,9 @@ class AM2320 {
         var diff = process.hrtime(this.lastUpdate);
         if ( diff[0] >= 2 ) {
             await this.wake(); // wake up
-            await this.delay(1);
+            await this.delay(3);
             await this.writeBytes(0x03, [0x00, 0x04]); 
-            await this.delay(1);
+            await this.delay(3);
             this.lastValue = await this.readBytes(0x00,8);
             this.lastUpdate = process.hrtime();    
         } 
