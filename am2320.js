@@ -74,7 +74,7 @@ class AM2320 {
         if ( diff[0] >= 2 ) {
             var i = 0;
             var ok = false;
-            for(; i < 5; i++) {
+            for(; i < 10; i++) {
                 try {
                     await this.wake(); // wake up
                     await this.delay(2);
