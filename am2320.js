@@ -53,7 +53,7 @@ class AM2320 {
     async read() {
         const value = await this.readRaw();
         if ( value[0] != 0x03 && value[1] != 0x04 ) {
-            console.log("AM2320 Error ", value.toString('hex'));
+            console.log("AM2320 ReadRaw bad should be 0x0304 ", value.toString('hex'));
         }
         const check = this.crc16(value,6);
         const crc = this.uint16(value[6],value[7]);
@@ -126,7 +126,7 @@ class AM2320 {
                 const buffer = Buffer.alloc(len);
                 this.i2c1.readI2cBlock(this.address,cmd,len,buffer, (err, readBytes, buffer)  => {
                     if ( err) {
-                        console.log("AM2320 readByte Error ",err);
+                        //console.log("AM2320 readByte Error ",err);
                         reject(err);
                     } else if (readBytes < len) {
                         reject("AM2320 Incomplete got"+readBytes);
@@ -145,7 +145,7 @@ class AM2320 {
                 const buffer = Buffer.from(arrayBuffer);
                 this.i2c1.writeI2cBlock(this.address, cmd, buffer.length, buffer, (err, readBytes, buffer)  => {
                     if ( err) {
-                        console.log("AM2320 writeBytes Error ",err);
+                        //console.log("AM2320 writeBytes Error ",err);
                         reject(err);
                     } else if (readBytes < buffer.length) {
                         reject("Incomplete sent"+readBytes);
